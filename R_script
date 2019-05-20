@@ -1,0 +1,92 @@
+###################################################
+### Import data and load packages
+###################################################
+require('INLA')
+#install.packages("INLA", repos=c(getOption("repos"), INLA="https://inla.r-inla-download.org/R/stable"), dep=TRUE)
+
+# import the data set
+data<-read.csv('~/data_RequenaMullor_etal_GCB.csv')
+
+###################################################
+### Inputs for the hurdle models
+###################################################
+
+# extract the coordinates to build the mesh
+coordsTra<-cbind(data$LON,data$LAT)
+coordsTra.df <- data.frame(coordsTra)
+
+# create the study area polygon as a boundary in the mesh creator
+boundary<-inla.nonconvex.hull(points = coordsTra,convex = 0.5, concave = 0.4)
+
+# build the mesh
+mesh1 <- inla.mesh.2d(loc = coordsTra, max.edge = c(12, 14),cutoff=0.1, boundary = boundary)
+# plot the mesh and sampled locations
+plot(mesh1); points(coordsTra, col='red', pch= 19)
+
+# SPDE model
+spde_m1 <- inla.spde2.matern(mesh1, alpha = 2,constr=TRUE)
+# create a projector matrix (links the v mesh vertices to the n observations)
+A_m1 <- inla.spde.make.A(mesh1, loc = coordsTra)
+# create an index to assist with keeping track of which elements relate to what effects
+s.index_m1 <- inla.spde.make.index("sOCCURRENCEtial.field", n.spde = spde_m1$n.spde)
+
+# to create Beta (y) and Bernoulli (z) response variables
+z <- as.numeric(data$COVER > 0)
+y <- ifelse(data$COVER > 0, yes = data$COVER, no = NA)
+
+# stack for the Beta process (big sagebrush cover)
+stackmY <- inla.stack(data = list(alldata=cbind(y, NA)), A = list(A_m1, 1), effects = list(s.index_mY=spde_m1$n.spde,
+list(b0Y = rep(1, length(y)),data.frame(FO=data$FO),data.frame(NOF=data$NOF),treatmentY=data$TREATMENT,
+idY = rep(1, length(data$OCCURRENCE)),data.frame(MAT=data$MAT),data.frame(SLOPE=data$SLOPE),
+idY2 = rep(1, length(data$OCCURRENCE)),idY3 = rep(1, length(data$OCCURRENCE)),idY4 = rep(1, length(data$OCCURRENCE)),
+data.frame(PREC=data$PREC))), tag = "beta")
+
+# stack for the Bernoulli process (big sagebrush occurrence)
+stackmZ <- inla.stack(data = list(alldata=cbind(NA, z)), A = list(A_m1, 1), effects = list(s.index_mZ=spde_m1$n.spde,
+list(b0Z = rep(1, length(z)),s.index_mZY = spde_m1$n.spde,data.frame(FO=data$FO),data.frame(NOF=data$NOF),
+treatmentZ=data$TREATMENT,data.frame(MAT=data$MAT),data.frame(SLOPE=data$SLOPE),
+idZ = rep(1, length(data$OCCURRENCE)),idZ2 = rep(1, length(data$OCCURRENCE)),idZ3 = rep(1, length(data$OCCURRENCE)),idZ4 = rep(1, length(data$OCCURRENCE)),
+data.frame(PREC=data$PREC))), tag = "bernoulli")
+
+# joint the Beta and Bernoulli stacks
+stackm<-inla.stack(stackmY,stackmZ)
+
+###################################################
+### Run the hurdle models
+###################################################
+
+# FO-model formula
+formula<-alldata ~ 0 + b0Y + b0Z + f(s.index_mY, model = spde_m1) + 
+f(s.index_mZY, copy = "s.index_mY", hyper = list(beta = list(fixed=FALSE))) + f(idY,FO,hyper = FALSE) + f(idZ,FO,hyper = FALSE) +
+f(idY2,MAT,hyper = FALSE) + f(idZ2,MAT,hyper = FALSE) + f(idY3,PREC,hyper = FALSE) + f(idZ3,PREC,hyper = FALSE)+
+f(idY4,SLOPE,hyper = FALSE) + f(idZ4,SLOPE,hyper = FALSE)
+
+# # NOF-model formula
+# formula<-alldata ~ 0 + b0Y + b0Z + f(s.index_mY, model = spde_m1) +
+# f(s.index_mZY, copy = "s.index_mY", hyper = list(beta = list(fixed=FALSE))) + f(idY,NOF,hyper = FALSE) + f(idZ,NOF,hyper = FALSE) +
+# f(idY2,MAT,hyper = FALSE) + f(idZ2,MAT,hyper = FALSE) + f(idY3,PREC,hyper = FALSE) + f(idZ3,PREC,hyper = FALSE)+
+# f(idY4,SLOPE,hyper = FALSE) + f(idZ4,SLOPE,hyper = FALSE)
+
+# # NoFire Var-model
+# formula<-alldata ~ 0 + b0Y + b0Z + f(s.index_mY, model = spde_m1) +
+# f(s.index_mZY, copy = "s.index_mY", hyper = list(beta = list(fixed=FALSE))) +
+# f(idY2,MAT,hyper = FALSE) + f(idZ2,MAT,hyper = FALSE) + f(idY3,PREC,hyper = FALSE) + f(idZ3,PREC,hyper = FALSE)+
+# f(idY4,SLOPE,hyper = FALSE) + f(idZ4,SLOPE,hyper = FALSE)
+
+# # TREAT-model
+# formula<-alldata ~ 0 + b0Y + b0Z + f(s.index_mY, model = spde_m1) + 
+# f(s.index_mZY, copy = "s.index_mY", hyper = list(beta = list(fixed=FALSE)))+
+# f(idY2,MAT,hyper = FALSE) + f(idZ2,MAT,hyper = FALSE) + f(idY3,PREC,hyper = FALSE) + f(idZ3,PREC,hyper = FALSE)+
+# f(idY4,SLOPE,hyper = FALSE) + f(idZ4,SLOPE,hyper = FALSE) + f(treatmentY,b0Y,model='iid') + f(treatmentZ,b0Z,model='iid')
+
+# # NOF + TREAT-model
+# formula<-alldata ~ 0 + b0Y + b0Z + f(s.index_mY, model = spde_m1) +
+# f(s.index_mZY, copy = "s.index_mY", hyper = list(beta = list(fixed=FALSE))) + f(idY,NOF,hyper = FALSE) + f(idZ,NOF,hyper = FALSE) +
+# f(idY2,MAT,hyper = FALSE) + f(idZ2,MAT,hyper = FALSE) + f(idY3,PREC,hyper = FALSE) + f(idZ3,PREC,hyper = FALSE)+
+# f(idY4,SLOPE,hyper = FALSE) + f(idZ4,SLOPE,hyper = FALSE) + f(treatmentY,b0Y,model='iid') + f(treatmentZ,b0Z,model='iid')
+
+
+# Run the model after activating the code of the corresponding formula above
+hurdle_model <- inla(formula, 
+data = inla.stack.data(stackm),control.predictor = list(A = inla.stack.A(stackm),link=c(rep(1,length(y)),rep(2,length(z))),compute=TRUE),
+control.compute=list(dic=T,waic=T,config=T),family = c("beta","binomial"),verbose = T)
