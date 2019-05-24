@@ -9,3 +9,5 @@ The workflow for every model required ~14 hours to run in a high-performance com
 ## License
 GNU General Public License, version 3 (GPL-3.0)
 (https://opensource.org/licenses/GPL-3.0)
+## DOI
+doi:10.5281/zenodo.3228461
