@@ -1,6 +1,5 @@
 # hurdle-models-for-big-sagebrush
-This repository includes the R code to run the hurdle models used in Requena-Mullor et al (2019) to model big sagebrush occurrence and cover
-.
+This repository contains the R code to reproduce the hurdle models for big sagebrush occurrence and cover published in Requena-Mullor et al. 2019 Global Change Biology.
 ## Requirements
 R: 3.5 version or later, R-INLA package: the latest stable version (http://www.r-inla.org/download).
 ## Usage
